@@ -200,7 +200,8 @@ with col_title:
     st.title("CWM Research beteween Faculty of Information Technology and Digital Innovation, KMUTNB and NOVELBIZ")
     st.caption("CWM Research beteween Faculty of Information Technology and Digital Innovation, KMUTNB and NOVELBIZ")
 with col_logo:
-    st.image("assets/logo.webp", use_container_width=True)
+    # logo width 80px , use_container_width=True
+    st.image("assets/logo.jpg", width=120 )
 
 # สร้างส่วนจำลองกล่องแชต
 if "messages" not in st.session_state:
@@ -234,6 +235,7 @@ _css = (
     f".cwm-btn:hover{{border-color:{COLOR_PRIMARY};color:{COLOR_PRIMARY}}}"
     f"[data-testid=stBottom]{{bottom:60px!important}}"
     f"section[data-testid=stMain] .block-container{{padding-bottom:180px!important}}"
+    f"[data-testid=stStatusWidget]{{position:fixed;bottom:125px;left:45px;transform:translateX(-50%);}}"
 )
 
 components.html(f"""
