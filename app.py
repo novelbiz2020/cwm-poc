@@ -1,4 +1,6 @@
 import streamlit as st
+import streamlit.components.v1 as components
+import json
 from supabase import create_client, Client
 from google import genai
 import pandas as pd
@@ -171,13 +173,34 @@ def ask_cwm_agent(user_question: str):
         "is_multi": is_multi_machine
     }
 
+QUICK_PROMPTS = [
+    ("🏭 ภาพรวมโรงงาน",         "ภาพรวมสถานะโรงงานวันนี้เป็นยังไง?"),
+    ("⚠️ เครื่องผิดปกติ",        "เครื่องไหนมีสถานะผิดปกติบ้าง?"),
+    ("🛑 เครื่องหยุด",           "มีเครื่องไหนหยุดทำงานอยู่บ้าง?"),
+    ("🌡️ อุณหภูมิสูง",          "เครื่องไหนมีอุณหภูมิสูงผิดปกติ?"),
+    ("📊 เปรียบเทียบประสิทธิภาพ", "เปรียบเทียบประสิทธิภาพการผลิตของทุกเครื่อง"),
+    ("🏆 ผู้นำการผลิต",          "เครื่องไหนผลิตได้เยอะที่สุด?"),
+]
+
 # =========================================================================
 # 3. ส่วนการแสดงผลหน้าจอ (Streamlit UI)
 # =========================================================================
+
+# --- Theme Colors (แก้ที่นี่ที่เดียว) ---
+COLOR_BG          = "#0e1117"   # พื้นหลัง app
+COLOR_SECONDARY   = "#f0f2f6"   # พื้นหลังปุ่ม / sidebar
+COLOR_TEXT        = "#31333f"   # สีตัวอักษร
+COLOR_PRIMARY     = "#ff4b4b"   # accent / hover
+COLOR_BORDER      = "rgba(49,51,63,0.2)"  # เส้นขอบ
+
 st.set_page_config(page_title="CWM - Town Square", page_icon="🤖", layout="wide")
 
-st.title("🤖 CWM (Chat with MES) - PoC")
-st.caption("ระบบสื่อสารและบริหารจัดการการผลิตด้วยภาษาธรรมชาติบนคลาวด์")
+col_title, col_logo = st.columns([8, 1])
+with col_title:
+    st.title("CWM Research beteween Faculty of Information Technology and Digital Innovation, KMUTNB and NOVELBIZ")
+    st.caption("CWM Research beteween Faculty of Information Technology and Digital Innovation, KMUTNB and NOVELBIZ")
+with col_logo:
+    st.image("assets/logo.webp", use_container_width=True)
 
 # สร้างส่วนจำลองกล่องแชต
 if "messages" not in st.session_state:
@@ -188,29 +211,109 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# ส่วนรับคำถามจากผู้ใช้
-if user_input := st.chat_input("พิมพ์คำถาม เช่น 'ขอข้อมูลเครื่องจักร 7', 'เครื่องไหนอุณหภูมิแกว่งสุด?', 'ภาพรวมวันนี้เป็นยังไง?'"):
+llm_status = st.empty()
+
+_prompts_json = json.dumps(
+    [{"label": lb, "prompt": pr} for lb, pr in QUICK_PROMPTS],
+    ensure_ascii=False
+)
+
+_css = (
+    f"#cwm-sq-bar{{position:fixed;bottom:0;left:0;right:0;"
+    f"background:{COLOR_BG};"
+    f"border-top:1px solid {COLOR_BORDER};"
+    f"padding:10px 20px 14px;"
+    f"display:flex;flex-wrap:wrap;align-items:center;gap:8px;"
+    f"z-index:1001}}"
+    f".cwm-btn{{border-radius:20px;"
+    f"border:1px solid {COLOR_BORDER};"
+    f"background:{COLOR_SECONDARY};"
+    f"color:{COLOR_TEXT};"
+    f"font-size:.82rem;"
+    f"padding:6px 14px;cursor:pointer;white-space:nowrap;font-family:inherit}}"
+    f".cwm-btn:hover{{border-color:{COLOR_PRIMARY};color:{COLOR_PRIMARY}}}"
+    f"[data-testid=stBottom]{{bottom:60px!important}}"
+    f"section[data-testid=stMain] .block-container{{padding-bottom:180px!important}}"
+)
+
+components.html(f"""
+<script>
+(function() {{
+    try {{
+        var par = window.parent;
+        var doc = par.document;
+        if (!doc || !doc.body) return;
+
+        var old = doc.getElementById("cwm-sq-bar");
+        if (old) old.remove();
+
+        par.cwmSend = function(text) {{
+            var ta = doc.querySelector("[data-testid=stChatInputTextArea]");
+            if (!ta) return;
+            var s = Object.getOwnPropertyDescriptor(par.HTMLTextAreaElement.prototype, "value").set;
+            s.call(ta, text);
+            ta.dispatchEvent(new par.Event("input", {{bubbles: true}}));
+            setTimeout(function() {{
+                var b = doc.querySelector("[data-testid=stChatInputSubmitButton]");
+                if (b) b.click();
+            }}, 100);
+        }};
+
+        if (!doc.getElementById("cwm-sq-style")) {{
+            var style = doc.createElement("style");
+            style.id = "cwm-sq-style";
+            style.textContent = "{_css}";
+            doc.head.appendChild(style);
+        }}
+
+        var bar = doc.createElement("div");
+        bar.id = "cwm-sq-bar";
+
+        var lbl = doc.createElement("span");
+        lbl.style.cssText = "font-size:.75rem;color:#888;white-space:nowrap";
+        lbl.textContent = "💡 คำถาม :";
+        bar.appendChild(lbl);
+
+        var ps = {_prompts_json};
+        ps.forEach(function(p) {{
+            var btn = doc.createElement("button");
+            btn.className = "cwm-btn";
+            btn.textContent = p.label;
+            btn.onclick = function() {{ par.cwmSend(p.prompt); }};
+            bar.appendChild(btn);
+        }});
+
+        doc.body.appendChild(bar);
+
+    }} catch(e) {{
+        console.error("CWM bar error:", e);
+    }}
+}})();
+</script>
+""", height=0, scrolling=False)
+
+user_input = st.chat_input("พิมพ์คำถาม เช่น 'ขอข้อมูลเครื่องจักร 7', 'เครื่องไหนอุณหภูมิแกว่งสุด?', 'ภาพรวมวันนี้เป็นยังไง?'")
+
+if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
-        
+
+    llm_status.markdown("🟢 **LLM กำลังประมวลผล...**")
+
     with st.chat_message("assistant"):
-        with st.spinner("CWM กำลังตรวจสอบและวิเคราะห์ข้อมูล..."):
-            result = ask_cwm_agent(user_input)
-            
-            # แสดงคำตอบจาก AI
-            st.markdown(result["answer"])
-            
-            # จัดการหน้าต่าง Expander ให้ยืดหยุ่นตามบริบท
-            if result["dataframe"] is not None:
-                machines_str = ", ".join(map(str, result["target_machines"]))
-                expander_title = f"📊 ดูบันทึกข้อมูลย้อนหลังของเครื่องจักรทั้งหมดที่เกี่ยวข้อง (ID: {machines_str})" if result["is_multi"] else f"📊 ดูบันทึกข้อมูลย้อนหลังของเครื่องจักรหมายเลข {result['target_machines'][0]}"
-                
-                with st.expander(expander_title):
-                    show_cols = ["timestamp", "machine_id", "status", "temperature", "operating_hours", "production_qty", "production_rate"]
-                    # กรองเอาเฉพาะคอลัมน์ที่มีจริงใน DataFrame
-                    show_cols = [c for c in show_cols if c in result["dataframe"].columns]
-                    st.dataframe(result["dataframe"][show_cols], use_container_width=True)
-                    
-    # บันทึกคำตอบลงประวัติ
+        result = ask_cwm_agent(user_input)
+
+        st.markdown(result["answer"])
+
+        if result["dataframe"] is not None:
+            machines_str = ", ".join(map(str, result["target_machines"]))
+            expander_title = f"📊 ดูบันทึกข้อมูลย้อนหลังของเครื่องจักรทั้งหมดที่เกี่ยวข้อง (ID: {machines_str})" if result["is_multi"] else f"📊 ดูบันทึกข้อมูลย้อนหลังของเครื่องจักรหมายเลข {result['target_machines'][0]}"
+
+            with st.expander(expander_title):
+                show_cols = ["timestamp", "machine_id", "status", "temperature", "operating_hours", "production_qty", "production_rate"]
+                show_cols = [c for c in show_cols if c in result["dataframe"].columns]
+                st.dataframe(result["dataframe"][show_cols], use_container_width=True)
+
+    llm_status.empty()
     st.session_state.messages.append({"role": "assistant", "content": result["answer"]})
